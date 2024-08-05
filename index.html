@@ -1,48 +1,27 @@
 <!DOCTYPE html>
-<html>
-  <body>
-    <video
-      id="my-video"
-      class="video-js"
-      controls
-      autoplay="true"
-      muted="muted"
-      width="640"
-      height="264"
-      data-setup="{}"
-    >
-    <p class="vjs-no-js">
-      To view this video please enable JavaScript, and consider upgrading to a
-      web browser that
-      <a href="https://videojs.com/html5-video-support/" target="_blank"
-        >supports HTML5 video</a
-      >
-    </p>
-  </video>
-
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Upload</title>
+</head>
+<body>
+    <h1>Upload Video</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="video" accept="video/*" required>
+        <button type="submit">Upload</button>
+    </form>
     <script>
-      let blobArray = [];
-      var myPlayer = document.getElementById("my-video");
-      var isPlaying = false;
-      const streaming = () => {
-        fetch("/streaming")
-          .then((resp) => resp.arrayBuffer())
-          .then((buf) => {
-            if (buf.byteLength === 0) {
-              return;
-            }
-
-            blobArray.push(new Blob([buf], { type: "video/mp4" }));
-            let blob = new Blob(blobArray, { type: "video/mp4" });
-            myPlayer.src = window.URL.createObjectURL(blob);
-            if (isPlaying) {
-              myPlayer.play();
-              isPlaying = true;
-            }
-            streaming();
-          });
-      };
-      streaming();
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.text();
+            alert(result);
+        };
     </script>
-  </body>
+</body>
 </html>

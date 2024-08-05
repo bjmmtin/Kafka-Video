@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <video
+      id="my-video"
+      class="video-js"
+      controls
+      autoplay="true"
+      muted="muted"
+      width="640"
+      height="264"
+      data-setup="{}"
+    >
+    </video>
+
+    <script>
+      let blobArray = [];
+      var myPlayer = document.getElementById("my-video");
+      var isPlaying = false;
+      const streaming = () => {
+        fetch("/video")
+          .then((resp) => resp.arrayBuffer())
+          .then((buf) => {
+            if (buf.byteLength === 0) {
+              return;
+            }
+
+            blobArray.push(new Blob([buf], { type: "video/mp4" }));
+            let blob = new Blob(blobArray, { type: "video/mp4" });
+            myPlayer.src = window.URL.createObjectURL(blob);
+            if (isPlaying) {
+              myPlayer.play();
+              isPlaying = true;
+            }
+            streaming();
+          });
+      };
+      streaming();
+    </script>
+  </body>
+</html>

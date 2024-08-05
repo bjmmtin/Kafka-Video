@@ -1,117 +1,105 @@
-import express from "express";
-import {config} from "dotenv";
-import {KafkaMessage} from "kafkajs";
-import path from "path";
-import fs from "fs";
+import express from 'express';
+import { Kafka, KafkaMessage } from 'kafkajs';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import stream from "stream";
 
-import {producer} from "./kafka/producer";
-import {consumer} from "./kafka/consumer";
-
-config();
-
 const app = express();
+const kafka = new Kafka({
+    clientId: 'video-streamer',
+    brokers: ['localhost:9092'],
+    requestTimeout: 25000,
+    connectionTimeout: 3000,
+});
+
+const producer = kafka.producer();
+const upload = multer({ dest: 'uploads/' });
 
 let current = 0;
-const mes: Array<KafkaMessage> = [];
+var mes: Array<KafkaMessage> = [];
 
-app.get("/streaming", (req, res) => {
-  const readStream = new stream.PassThrough();
+app.post('/upload', upload.single('video'), async (req, res) => {
+    current = 0;
+    mes = [];
+    if (!req.file) {
+        return res.status(400).send('No file uploaded');
+    }
+    const videoPath = req.file.path;
 
-  mes.sort((a, b) => {
-    const aa = JSON.parse(a.key.toString("utf8"));
-    const bb = JSON.parse(b.key.toString("utf8"));
-    return aa > bb ? 1 : bb > aa ? -1 : 0;
-  });
+    ////// producer      run ////////////////////////////////////////////////////////////////////////////
+    const producer = kafka.producer();
+    await producer.connect();
+    const videoBuffer = await fs.promises.readFile(path.resolve("video.mp4"));
 
-  const buf_array = mes.map(b => b.value)[current];
+    const CHUNK_SIZE = 1024 * 512; // 0.5 MB
 
-  if (!buf_array) {
-    return res.end();
-  }
+    for (let i = 0; i < videoBuffer.length; i += CHUNK_SIZE) {
+        const chunk = videoBuffer.slice(i, i + CHUNK_SIZE);
+        await producer.send({
+            topic: 'topic-video',
+            messages: [{ value: chunk, key: String(i / CHUNK_SIZE), }],
+        });
+    }
 
-  const buf = Buffer.from(buf_array);
-
-  current++;
-
-  const start = 0;
-  const end = buf.length;
-  const size = end - start;
-  const head = {
-    "Access-Control-Allow-Origin": "*",
-    // "Content-Range": `bytes ${start}-${end}/17839845`,
-    "Accept-Ranges": "bytes",
-    "Content-Length": size,
-    "Content-Type": "video/mp4",
-  };
-
-  res.writeHead(206, head);
-
-  readStream.end(buf);
-  readStream.pipe(res);
+    // consumer      run ///////////////////////////////////////////////////////////////////////
+    const consumer = kafka.consumer({ groupId: 'video-viewer' });
+    await consumer.connect();
+    await consumer.subscribe({ topic: 'topic-video', fromBeginning: true });
+    await consumer.run({
+        eachMessage: async ({ message }): Promise<void> => {
+            return new Promise(resolve => {
+                mes.push(message);
+                resolve();
+            });
+        },
+    });
+    await producer.disconnect();
+    fs.unlinkSync(videoPath); // Remove the file after sending
+    return res.send('Video uploaded and sent to Kafka');
 });
 
-app.get("/file_streaming", (req, res) => {
-  const path = "video.mp4";
-  const stat = fs.statSync(path);
-  const fileSize = stat.size;
-  const range = req.headers.range;
-  let start;
-  let end;
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    start = parseInt(parts[0], 10);
-    end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-  } else {
-    start = 0;
-    end = 1;
-  }
-
-  const chunksize = end - start + 1;
-  const file = fs.createReadStream(path, {start, end});
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-    "Accept-Ranges": "bytes",
-    "Content-Length": chunksize,
-    "Content-Type": "video/mp4",
-  };
-  res.writeHead(206, headers);
-  file.pipe(res);
+app.get('/play', async (req, res) => {
+    res.sendFile(path.resolve('video.html'));
 });
 
-app.get("/produce", async (req, res) => {
-  await producer();
-  const cons = await consumer();
-  await cons.run({
-    eachMessage: async ({message}): Promise<void> => {
-      return new Promise(resolve => {
-        mes.push(message);
-        resolve();
-      });
-    },
-  });
-  res.setHeader("Content-type", "application/json");
-  res.setHeader("Access-Control-Allow-Origin", "*");
+app.get('/video', async (req, res) => {
 
-  res.send({message: "producing"});
+    const readStream = new stream.PassThrough();
+    mes.sort((a, b) => {
+        const aa = JSON.parse(a.key.toString("utf8"));
+        const bb = JSON.parse(b.key.toString("utf8"));
+        return aa > bb ? 1 : bb > aa ? -1 : 0;
+    });
+
+    const buf_array = mes.map(b => b.value)[current];
+
+    if (!buf_array) {
+        return res.end();
+    }
+    const buf = Buffer.from(buf_array);
+    current++;
+    const start = 0;
+    const end = buf.length;
+    const size = end - start;
+    const head = {
+        "Access-Control-Allow-Origin": "*",
+        // "Content-Range": `bytes ${start}-${end}/17839845`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": size,
+        "Content-Type": "video/mp4",
+    };
+
+    res.writeHead(206, head);
+    readStream.end(buf);
+    readStream.pipe(res);
 });
 
-app.get("/consume", async (req, res) => {
-  await consumer();
-  res.setHeader("Content-type", "application/json");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
-  res.send({message: "producing"});
+app.get('/upload', (req, res) => {
+    res.sendFile(path.resolve("index.html"));
 });
 
-app.get("/", function (req, res) {
-  res.sendFile(path.resolve("index.html"));
-});
-
-const host = (process.env.HOST as unknown) as string;
-const port = (process.env.PORT as unknown) as number;
-
-app.listen(port, host, () => {
-  console.info(`API server is running on http://${host}:${port}`);
+app.listen(3000, async () => {
+    await producer.connect();
+    console.log('Server is running on http://localhost:3000');
 });
