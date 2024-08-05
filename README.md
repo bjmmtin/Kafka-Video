@@ -14,17 +14,17 @@ Now to stream the video we have to make the producer to send them in chunks.
 
 ### first to run zookeeper.
 
-   .\bin\windows\zookeeper-server-start.bat .\config\zookeeper.properties
+    .\bin\windows\zookeeper-server-start.bat .\config\zookeeper.properties
 
    
 ### second to run kafka.
 
-   .\bin\windows\kafka-server-start.bat .\config\server.properties
+    .\bin\windows\kafka-server-start.bat .\config\server.properties
 
 
 ### third to set kafka - topic.
 
-   .\bin\windows\kafka-topics.bat --create --topic topic-video --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1    
+    .\bin\windows\kafka-topics.bat --create --topic topic-video --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1    
 
 
 ### Note.
