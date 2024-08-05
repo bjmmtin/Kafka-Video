@@ -11,11 +11,21 @@ Otherwise in a production env you could take the video from an S3 bucket for exa
 Now to stream the video we have to make the producer to send them in chunks.
 
 ### bash commands
-first: .\bin\windows\zookeeper-server-start.bat .\config\zookeeper.properties
 
-second: .\bin\windows\kafka-server-start.bat .\config\server.properties
+### first to run zookeeper.
 
-third: .\bin\windows\kafka-topics.bat --create --topic topic-video --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+   .\bin\windows\zookeeper-server-start.bat .\config\zookeeper.properties
+
+   
+### second to run kafka.
+
+   .\bin\windows\kafka-server-start.bat .\config\server.properties
+
+
+### third to set kafka - topic.
+
+   .\bin\windows\kafka-topics.bat --create --topic topic-video --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1    
+
 
 ### Note.
 
